@@ -1,0 +1,506 @@
+---
+// ADIF Map — 2D0PEY
+---
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>QSO Map</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <style is:global>
+    @import "tailwindcss";
+
+    html, body { height: 100%; overflow: hidden; }
+
+    .leaflet-popup-content-wrapper {
+      background: #0d1117; color: #e2e8f0;
+      border: 1px solid #1e2736; border-radius: 8px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.6); padding: 0;
+    }
+    .leaflet-popup-content {
+      margin: 0;
+      font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+    }
+    .leaflet-popup-tip { background: #0d1117; }
+    .leaflet-popup-close-button { color: #64748b !important; font-size: 18px !important; top: 6px !important; right: 8px !important; }
+    .leaflet-popup-close-button:hover { color: #e2e8f0 !important; }
+    .leaflet-control-zoom a { background: #0d1117 !important; color: #94a3b8 !important; border-color: #1e2736 !important; }
+    .leaflet-control-zoom a:hover { background: #1e2736 !important; color: #e2e8f0 !important; }
+    .leaflet-control-attribution { background: rgba(13,17,23,0.8) !important; color: #475569 !important; font-size: 10px !important; }
+    .leaflet-control-attribution a { color: #64748b !important; }
+
+    body.dragging #map-container { outline: 2px dashed #f56400; outline-offset: -4px; }
+
+    #qrz-password:focus, #qrz-username:focus { outline: none; border-color: #f56400; }
+  </style>
+</head>
+<body class="bg-[#080b12] text-slate-100 h-full flex flex-col">
+
+  <!-- QRZ Modal -->
+  <div id="qrz-modal" style="display:none" class="fixed inset-0 z-[2000] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+    <div class="bg-[#0d1117] border border-[#1e2736] rounded-xl p-6 w-80 shadow-2xl">
+      <div class="flex items-center justify-between mb-1">
+        <h2 class="font-mono font-bold text-slate-100 text-sm">QRZ.com</h2>
+        <button id="qrz-modal-close" class="text-slate-500 hover:text-slate-300 text-lg leading-none">×</button>
+      </div>
+      <p class="text-slate-500 text-xs font-mono mb-4">Resolves contacts with no grid square.</p>
+      <div class="space-y-3">
+        <div>
+          <label class="text-xs text-slate-500 font-mono block mb-1">Username</label>
+          <input id="qrz-username" type="text" value="2D0PEY"
+            class="w-full bg-[#080b12] border border-[#1e2736] rounded px-3 py-2 text-sm font-mono text-slate-100 transition-colors" />
+        </div>
+        <div>
+          <label class="text-xs text-slate-500 font-mono block mb-1">Password</label>
+          <input id="qrz-password" type="password"
+            class="w-full bg-[#080b12] border border-[#1e2736] rounded px-3 py-2 text-sm font-mono text-slate-100 transition-colors" />
+        </div>
+      </div>
+      <p id="qrz-error" style="display:none" class="text-red-400 text-xs font-mono mt-2"></p>
+      <button id="qrz-connect-btn"
+        class="w-full mt-4 bg-[#f56400] hover:bg-[#d94f00] text-white text-sm font-mono font-semibold py-2 rounded transition-colors">
+        Connect
+      </button>
+      <p class="text-slate-700 text-xs font-mono text-center mt-3">Credentials stored in your browser only</p>
+    </div>
+  </div>
+
+  <!-- Header -->
+  <header class="flex items-center justify-between px-4 h-12 bg-[#0d1117] border-b border-[#1e2736] shrink-0 z-10">
+    <div class="flex items-center gap-3">
+      <span class="font-mono font-bold text-[#f56400] text-sm tracking-wider" id="header-call">QSO MAP</span>
+      <span class="text-[#1e2736]">|</span>
+      <div id="stats-bar" style="display:none" class="flex items-center gap-5 font-mono text-xs text-slate-400">
+        <span><span id="stat-total" class="text-slate-100 font-semibold"></span> QSOs</span>
+        <span><span id="stat-mapped" class="text-slate-100 font-semibold"></span> mapped</span>
+        <span id="stat-unmapped-wrap" class="hidden"><span id="stat-unmapped" class="text-slate-500"></span> no grid</span>
+        <span id="stat-bands-wrap" class="hidden"><span id="stat-bands" class="text-slate-400"></span></span>
+      </div>
+    </div>
+    <div class="flex items-center gap-2">
+      <button id="qrz-btn"
+        class="text-xs font-mono px-3 py-1.5 rounded border border-[#1e2736] text-slate-500 hover:border-slate-600 hover:text-slate-300 transition-colors">
+        QRZ
+      </button>
+      <label for="file-input"
+        class="cursor-pointer bg-[#f56400] hover:bg-[#d94f00] text-white text-xs font-mono font-semibold px-3 py-1.5 rounded transition-colors select-none">
+        Load ADIF
+      </label>
+      <input type="file" id="file-input" style="opacity:0;width:0;height:0;position:absolute;" />
+    </div>
+  </header>
+
+  <!-- Map -->
+  <div class="relative flex-1" id="map-container">
+    <div id="map" class="absolute inset-0"></div>
+
+    <!-- Welcome overlay -->
+    <div id="overlay" class="absolute inset-0 flex items-center justify-center z-[1000] bg-[#080b12]/80 backdrop-blur-sm">
+      <div class="text-center border border-[#1e2736] rounded-xl p-12 max-w-sm bg-[#0d1117]">
+        <svg class="w-12 h-12 mx-auto mb-5 text-[#f56400]" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 6.75V15m6-6v8.25m.503 3.498 4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 0 0-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c-.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0Z" />
+        </svg>
+        <p class="text-slate-200 font-mono text-base font-semibold mb-2">Drop your ADIF file here</p>
+        <p class="text-slate-500 text-xs font-mono">or use the Load ADIF button above</p>
+        <p class="text-slate-600 text-xs font-mono mt-1">.adi / .adif — WSJT-X, Minos, any logger</p>
+      </div>
+    </div>
+
+    <!-- Legend -->
+    <div id="legend" class="hidden absolute bottom-6 left-4 z-[999] bg-[#0d1117]/90 backdrop-blur border border-[#1e2736] rounded-lg p-3 text-xs font-mono text-slate-300 min-w-[90px]"></div>
+  </div>
+
+</body>
+
+<script>
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+
+// ─── ADIF Parser ─────────────────────────────────────────────────────────────
+
+function parseADIF(text) {
+  const records = [];
+  const eohIdx = text.search(/<eoh>/i);
+  const body = eohIdx >= 0 ? text.slice(eohIdx + 5) : text;
+  for (const part of body.split(/<eor>/i)) {
+    if (!part.trim()) continue;
+    const record: Record<string, string> = {};
+    const re = /<([^:>]+):(\d+)(?::[^>]*)?>/g;
+    let m;
+    while ((m = re.exec(part)) !== null) {
+      const len = parseInt(m[2]);
+      if (len === 0) continue;
+      record[m[1].toLowerCase()] = part.slice(m.index + m[0].length, m.index + m[0].length + len).trim();
+    }
+    if (record.call) records.push(record);
+  }
+  return records;
+}
+
+// ─── Maidenhead → [lat, lon] ─────────────────────────────────────────────────
+
+function gridToLatLon(grid: string): [number, number] | null {
+  if (!grid || grid.length < 4) return null;
+  const g = grid.toUpperCase();
+  if (!/^[A-R][A-R][0-9][0-9]/i.test(g)) return null;
+  let lon = (g.charCodeAt(0) - 65) * 20 - 180;
+  let lat = (g.charCodeAt(1) - 65) * 10 - 90;
+  lon += parseInt(g[2]) * 2;
+  lat += parseInt(g[3]);
+  if (g.length >= 6 && /[A-X][A-X]/i.test(g.slice(4, 6))) {
+    lon += (g.charCodeAt(4) - 65) * (2 / 24) + (1 / 24);
+    lat += (g.charCodeAt(5) - 65) * (1 / 24) + (1 / 48);
+  } else {
+    lon += 1; lat += 0.5;
+  }
+  return [lat, lon];
+}
+
+// ─── Band colours ─────────────────────────────────────────────────────────────
+
+const BAND_COLORS: Record<string, string> = {
+  '160m':'#ef4444','80m':'#f97316','60m':'#eab308','40m':'#84cc16',
+  '30m':'#22c55e','20m':'#06b6d4','17m':'#3b82f6','15m':'#8b5cf6',
+  '12m':'#d946ef','10m':'#f43f5e','6m':'#fb923c','4m':'#facc15',
+  '2m':'#34d399','70cm':'#a78bfa','23cm':'#e879f9',
+};
+const BAND_ORDER = ['160m','80m','60m','40m','30m','20m','17m','15m','12m','10m','6m','4m','2m','70cm','23cm'];
+
+function bandColor(band: string) { return BAND_COLORS[band?.toLowerCase()] || '#64748b'; }
+function bandSort(a: string, b: string) { return BAND_ORDER.indexOf(a.toLowerCase()) - BAND_ORDER.indexOf(b.toLowerCase()); }
+
+function dot(color: string, size = 8) {
+  return `<div style="width:${size}px;height:${size}px;background:${color};border:1px solid rgba(255,255,255,0.35);border-radius:50%;box-shadow:0 0 4px ${color}44;"></div>`;
+}
+function qrzDot(color: string) {
+  return `<div style="position:relative;width:14px;height:14px;">
+    <div style="position:absolute;inset:0;border:1.5px dashed ${color};border-radius:50%;opacity:0.7;"></div>
+    <div style="position:absolute;top:3px;left:3px;width:8px;height:8px;background:${color};border-radius:50%;opacity:0.85;box-shadow:0 0 3px ${color}66;"></div>
+  </div>`;
+}
+
+// ─── Map ──────────────────────────────────────────────────────────────────────
+
+const map = L.map('map', { center: [54.15, -4.47], zoom: 4 });
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+  subdomains: 'abcd', maxZoom: 19,
+}).addTo(map);
+
+const contactsGroup = L.layerGroup().addTo(map);
+let homeMarker: L.Marker | null = null;
+let homeLatLon: [number, number] = [54.15, -4.47];
+
+function setHomeMarker(latlon: [number, number], callsign: string, grid: string) {
+  homeMarker?.remove();
+  homeLatLon = latlon;
+  homeMarker = L.marker(latlon, {
+    icon: L.divIcon({
+      className: '',
+      html: `<div style="width:14px;height:14px;background:#f56400;border:2px solid #fff;border-radius:50%;box-shadow:0 0 8px #f5640088;"></div>`,
+      iconSize: [14, 14], iconAnchor: [7, 7],
+    }),
+    zIndexOffset: 1000,
+  }).addTo(map).bindPopup(popupHtml({ call: callsign, grid, label: 'My station', color: '#f56400' }));
+}
+
+// ─── Popup ────────────────────────────────────────────────────────────────────
+
+function popupHtml({ call, grid, band, mode, date, time, rstSent, rstRcvd, label, color }: {
+  call: string; grid?: string; band?: string; mode?: string;
+  date?: string; time?: string; rstSent?: string; rstRcvd?: string;
+  label?: string; color?: string;
+}) {
+  const rows = [];
+  if (grid)    rows.push(`<div style="color:#94a3b8;">${grid}</div>`);
+  if (band)    rows.push(`<div><span style="color:${color}">${band}</span>${mode ? ` · ${mode}` : ''}</div>`);
+  if (date)    rows.push(`<div style="color:#94a3b8;">${date}${time ? ` ${time}` : ''}</div>`);
+  if (rstRcvd) rows.push(`<div style="color:#94a3b8;">SNR ${rstRcvd} / ${rstSent}</div>`);
+  if (label)   rows.push(`<div style="color:#475569;font-size:11px;margin-top:4px;">${label}</div>`);
+  return `<div style="padding:10px 14px;min-width:140px;">
+    <div style="font-size:14px;font-weight:700;color:#f1f5f9;margin-bottom:4px;">${call}</div>
+    ${rows.join('')}
+  </div>`;
+}
+
+// ─── Render contacts ──────────────────────────────────────────────────────────
+
+let lastRecords: ReturnType<typeof parseADIF> = [];
+
+function renderContacts(records: ReturnType<typeof parseADIF>) {
+  lastRecords = records;
+  contactsGroup.clearLayers();
+  if (!records.length) return;
+
+  const first = records[0];
+  const myCallsign = first.station_callsign || first.operator || '2D0PEY';
+  const myGrid = first.my_gridsquare || 'IO74RE';
+  const myLatLon = gridToLatLon(myGrid) || [54.15, -4.47] as [number, number];
+
+  setHomeMarker(myLatLon, myCallsign, myGrid);
+  document.getElementById('header-call')!.textContent = myCallsign;
+
+  let mapped = 0, unmapped = 0;
+  const bandsUsed = new Set<string>();
+  const bounds = L.latLngBounds([myLatLon]);
+
+  for (const r of records) {
+    const grid = r.gridsquare;
+    if (!grid || grid.length < 4) { unmapped++; continue; }
+    const pos = gridToLatLon(grid);
+    if (!pos) { unmapped++; continue; }
+
+    mapped++;
+    const band = r.band || '', mode = r.submode || r.mode || '';
+    const color = bandColor(band);
+    if (band) bandsUsed.add(band);
+    bounds.extend(pos);
+
+    L.polyline([myLatLon, pos], { color, weight: 1, opacity: 0.35 }).addTo(contactsGroup);
+
+    const rawDate = r.qso_date || '';
+    const date = rawDate.length === 8 ? `${rawDate.slice(0,4)}-${rawDate.slice(4,6)}-${rawDate.slice(6,8)}` : '';
+    const rawTime = r.time_on || '';
+    const time = rawTime.length >= 4 ? `${rawTime.slice(0,2)}:${rawTime.slice(2,4)}Z` : '';
+
+    L.marker(pos, { icon: L.divIcon({ className: '', html: dot(color, 8), iconSize: [8,8], iconAnchor: [4,4] }) })
+      .addTo(contactsGroup)
+      .bindPopup(popupHtml({ call: r.call, grid, band, mode, date, time, rstSent: r.rst_sent, rstRcvd: r.rst_rcvd, color }));
+  }
+
+  document.getElementById('stat-total')!.textContent = String(records.length);
+  document.getElementById('stat-mapped')!.textContent = String(mapped);
+
+  const unmappedWrap = document.getElementById('stat-unmapped-wrap')!;
+  if (unmapped > 0) {
+    document.getElementById('stat-unmapped')!.textContent = String(unmapped);
+    unmappedWrap.classList.remove('hidden');
+  } else {
+    unmappedWrap.classList.add('hidden');
+  }
+
+  const bandsWrap = document.getElementById('stat-bands-wrap')!;
+  if (bandsUsed.size > 0) {
+    document.getElementById('stat-bands')!.textContent = [...bandsUsed].sort(bandSort).join(' · ');
+    bandsWrap.classList.remove('hidden');
+  } else {
+    bandsWrap.classList.add('hidden');
+  }
+
+  document.getElementById('stats-bar')!.style.display = 'flex';
+  document.getElementById('overlay')!.style.display = 'none';
+  updateLegend(bandsUsed);
+  if (mapped > 0) map.fitBounds(bounds, { padding: [40, 40], maxZoom: 8 });
+
+  // Auto-resolve unmapped contacts if QRZ is connected
+  if (unmapped > 0 && qrzSession) resolveUnmapped(records);
+}
+
+// ─── Legend ───────────────────────────────────────────────────────────────────
+
+function updateLegend(bands: Set<string>) {
+  const el = document.getElementById('legend')!;
+  if (!bands.size) { el.classList.add('hidden'); return; }
+  el.innerHTML = [...bands].sort(bandSort).map(band =>
+    `<div style="display:flex;align-items:center;gap:7px;margin-bottom:4px;">${dot(bandColor(band), 10)}<span>${band}</span></div>`
+  ).join('');
+  el.classList.remove('hidden');
+}
+
+// ─── File loading ─────────────────────────────────────────────────────────────
+
+function loadFile(file: File) {
+  const reader = new FileReader();
+  reader.onload = (e) => renderContacts(parseADIF(e.target!.result as string));
+  reader.readAsText(file);
+}
+
+document.getElementById('file-input')!.addEventListener('change', (e) => {
+  const file = (e.target as HTMLInputElement).files?.[0];
+  if (file) loadFile(file);
+  (e.target as HTMLInputElement).value = '';
+});
+
+document.addEventListener('dragover', (e) => { e.preventDefault(); e.stopPropagation(); document.body.classList.add('dragging'); }, true);
+document.addEventListener('dragleave', (e) => { if (!e.relatedTarget) document.body.classList.remove('dragging'); }, true);
+document.addEventListener('drop', (e) => {
+  e.preventDefault(); e.stopPropagation();
+  document.body.classList.remove('dragging');
+  const file = (e as DragEvent).dataTransfer?.files?.[0];
+  if (file) loadFile(file);
+}, true);
+
+// ─── QRZ ──────────────────────────────────────────────────────────────────────
+
+const QRZ_CREDS_KEY = 'adif-map-qrz-creds';
+let qrzSession: string | null = sessionStorage.getItem('adif-map-qrz-session');
+
+function setQrzButtonState(state: 'disconnected' | 'resolving' | 'connected') {
+  const btn = document.getElementById('qrz-btn')!;
+  btn.className = 'text-xs font-mono px-3 py-1.5 rounded border transition-colors';
+  if (state === 'connected') {
+    btn.classList.add('border-emerald-800', 'text-emerald-400', 'hover:border-emerald-600');
+    btn.textContent = 'QRZ ●';
+  } else if (state === 'resolving') {
+    btn.classList.add('border-amber-800', 'text-amber-400');
+    btn.textContent = 'QRZ …';
+  } else {
+    btn.classList.add('border-[#1e2736]', 'text-slate-500', 'hover:border-slate-600', 'hover:text-slate-300');
+    btn.textContent = 'QRZ';
+  }
+}
+
+async function qrzAuth(username: string, password: string): Promise<string> {
+  const res = await fetch(
+    `https://xmldata.qrz.com/xml/current/?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}&agent=adif-map-v0.1`
+  );
+  const xml = new DOMParser().parseFromString(await res.text(), 'text/xml');
+  const error = xml.querySelector('Error')?.textContent;
+  if (error) throw new Error(error);
+  const key = xml.querySelector('Key')?.textContent;
+  if (!key) throw new Error('No session key returned');
+  return key;
+}
+
+async function qrzLookup(callsign: string) {
+  if (!qrzSession) return null;
+  try {
+    const res = await fetch(
+      `https://xmldata.qrz.com/xml/current/?s=${qrzSession}&callsign=${encodeURIComponent(callsign)}&agent=adif-map-v0.1`
+    );
+    const xml = new DOMParser().parseFromString(await res.text(), 'text/xml');
+    const error = xml.querySelector('Error')?.textContent;
+    if (error?.toLowerCase().includes('session')) {
+      qrzSession = null;
+      sessionStorage.removeItem('adif-map-qrz-session');
+      setQrzButtonState('disconnected');
+      return null;
+    }
+    const grid    = xml.querySelector('grid')?.textContent?.trim() || null;
+    const latStr  = xml.querySelector('lat')?.textContent;
+    const lonStr  = xml.querySelector('lon')?.textContent;
+    const country = xml.querySelector('country')?.textContent?.trim() || null;
+    return {
+      grid,
+      lat: latStr ? parseFloat(latStr) : null,
+      lon: lonStr ? parseFloat(lonStr) : null,
+      country,
+    };
+  } catch { return null; }
+}
+
+async function resolveUnmapped(records: ReturnType<typeof parseADIF>) {
+  if (!qrzSession) return;
+  const unmapped = records.filter(r => !r.gridsquare || r.gridsquare.length < 4);
+  if (!unmapped.length) return;
+
+  setQrzButtonState('resolving');
+  let resolved = 0;
+
+  for (const r of unmapped) {
+    if (!qrzSession) break;
+    const data = await qrzLookup(r.call);
+    if (!data) continue;
+
+    let pos: [number, number] | null = null;
+    if (data.grid && data.grid.length >= 4) pos = gridToLatLon(data.grid);
+    else if (data.lat && data.lon) pos = [data.lat, data.lon];
+    if (!pos) continue;
+
+    resolved++;
+    const band = r.band || '', mode = r.submode || r.mode || '';
+    const color = bandColor(band);
+
+    L.polyline([homeLatLon, pos], { color, weight: 1, opacity: 0.2, dashArray: '4 4' }).addTo(contactsGroup);
+
+    const rawDate = r.qso_date || '';
+    const date = rawDate.length === 8 ? `${rawDate.slice(0,4)}-${rawDate.slice(4,6)}-${rawDate.slice(6,8)}` : '';
+    const rawTime = r.time_on || '';
+    const time = rawTime.length >= 4 ? `${rawTime.slice(0,2)}:${rawTime.slice(2,4)}Z` : '';
+
+    L.marker(pos, { icon: L.divIcon({ className: '', html: qrzDot(color), iconSize: [14,14], iconAnchor: [7,7] }) })
+      .addTo(contactsGroup)
+      .bindPopup(popupHtml({
+        call: r.call,
+        grid: data.grid || (data.lat ? `${data.lat.toFixed(1)}°, ${data.lon!.toFixed(1)}°` : ''),
+        band, mode, date, time,
+        rstSent: r.rst_sent, rstRcvd: r.rst_rcvd, color,
+        label: `via QRZ${data.country ? ' · ' + data.country : ''}`,
+      }));
+  }
+
+  // Update stats counters
+  const mappedEl = document.getElementById('stat-mapped')!;
+  mappedEl.textContent = String(parseInt(mappedEl.textContent!) + resolved);
+  const unmappedEl = document.getElementById('stat-unmapped')!;
+  const remaining = parseInt(unmappedEl.textContent!) - resolved;
+  if (remaining <= 0) document.getElementById('stat-unmapped-wrap')!.classList.add('hidden');
+  else unmappedEl.textContent = String(remaining);
+
+  setQrzButtonState('connected');
+}
+
+// Modal
+const modal = document.getElementById('qrz-modal')!;
+const showModal = () => { modal.style.display = 'flex'; document.getElementById('qrz-password')!.focus(); };
+const hideModal = () => { modal.style.display = 'none'; };
+
+document.getElementById('qrz-btn')!.addEventListener('click', showModal);
+document.getElementById('qrz-modal-close')!.addEventListener('click', hideModal);
+modal.addEventListener('click', (e) => { if (e.target === modal) hideModal(); });
+
+document.getElementById('qrz-password')!.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') document.getElementById('qrz-connect-btn')!.click();
+});
+
+document.getElementById('qrz-connect-btn')!.addEventListener('click', async () => {
+  const username = (document.getElementById('qrz-username') as HTMLInputElement).value.trim();
+  const password = (document.getElementById('qrz-password') as HTMLInputElement).value;
+  const errEl = document.getElementById('qrz-error')!;
+  const btn = document.getElementById('qrz-connect-btn') as HTMLButtonElement;
+
+  if (!username || !password) {
+    errEl.textContent = 'Enter both username and password.';
+    errEl.style.display = 'block';
+    return;
+  }
+  btn.textContent = 'Connecting…'; btn.disabled = true;
+  errEl.style.display = 'none';
+
+  try {
+    const key = await qrzAuth(username, password);
+    qrzSession = key;
+    sessionStorage.setItem('adif-map-qrz-session', key);
+    localStorage.setItem(QRZ_CREDS_KEY, JSON.stringify({ username, password: btoa(password) }));
+    setQrzButtonState('connected');
+    hideModal();
+    if (lastRecords.length) resolveUnmapped(lastRecords);
+  } catch (err: any) {
+    errEl.textContent = err.message || 'Connection failed.';
+    errEl.style.display = 'block';
+  } finally {
+    btn.textContent = 'Connect'; btn.disabled = false;
+  }
+});
+
+// Restore saved credentials on load
+(async () => {
+  if (qrzSession) {
+    setQrzButtonState('connected');
+    return;
+  }
+  const stored = localStorage.getItem(QRZ_CREDS_KEY);
+  if (!stored) return;
+  try {
+    const { username, password } = JSON.parse(stored);
+    const key = await qrzAuth(username, atob(password));
+    qrzSession = key;
+    sessionStorage.setItem('adif-map-qrz-session', key);
+    setQrzButtonState('connected');
+  } catch {
+    setQrzButtonState('disconnected');
+  }
+})();
+</script>
+</html>
