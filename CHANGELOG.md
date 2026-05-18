@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.2] — 2026-05-19
+
+### Added
+- Live file watch — click Watch, pick the WSJT-X ADIF file, map updates every 15 seconds as new contacts are logged (Chrome/Edge only via File System Access API)
+- Pulsing ● Live indicator in header while watching; click again to stop
+- QRZ result cache — repeated re-renders during live watch don't re-query already-resolved callsigns
+
 ## [0.1.1] — 2026-05-19
 
 ### Added

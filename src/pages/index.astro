@@ -33,6 +33,9 @@
     body.dragging #map-container { outline: 2px dashed #f56400; outline-offset: -4px; }
 
     #qrz-password:focus, #qrz-username:focus { outline: none; border-color: #f56400; }
+
+    @keyframes live-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+    .live-pulse { animation: live-pulse 1.4s ease-in-out infinite; }
   </style>
 </head>
 <body class="bg-[#080b12] text-slate-100 h-full flex flex-col">
@@ -79,6 +82,10 @@
       </div>
     </div>
     <div class="flex items-center gap-2">
+      <button id="watch-btn"
+        class="text-xs font-mono px-3 py-1.5 rounded border border-[#1e2736] text-slate-500 hover:border-slate-600 hover:text-slate-300 transition-colors">
+        Watch
+      </button>
       <button id="gl-btn"
         class="text-xs font-mono px-3 py-1.5 rounded border border-emerald-800 text-emerald-400 hover:border-emerald-600 transition-colors">
         GL
@@ -337,6 +344,67 @@ document.addEventListener('drop', (e) => {
   if (file) loadFile(file);
 }, true);
 
+// ─── Live file watch ─────────────────────────────────────────────────────────
+
+const POLL_MS = 15_000;
+let watchHandle: any = null;
+let watchTimer: ReturnType<typeof setInterval> | null = null;
+let lastFileText = '';
+
+function setWatchBtn(state: 'off' | 'live') {
+  const btn = document.getElementById('watch-btn')!;
+  if (state === 'live') {
+    btn.className = 'text-xs font-mono px-3 py-1.5 rounded border border-rose-700 text-rose-400 transition-colors';
+    btn.innerHTML = '<span class="live-pulse">●</span>&nbsp;Live';
+  } else {
+    btn.className = 'text-xs font-mono px-3 py-1.5 rounded border border-[#1e2736] text-slate-500 hover:border-slate-600 hover:text-slate-300 transition-colors';
+    btn.textContent = 'Watch';
+  }
+}
+
+async function pollFile() {
+  if (!watchHandle) return;
+  try {
+    const file = await watchHandle.getFile();
+    const text = await file.text();
+    if (text !== lastFileText) {
+      lastFileText = text;
+      renderContacts(parseADIF(text));
+    }
+  } catch {
+    stopWatch();
+  }
+}
+
+function stopWatch() {
+  if (watchTimer) { clearInterval(watchTimer); watchTimer = null; }
+  watchHandle = null;
+  lastFileText = '';
+  setWatchBtn('off');
+}
+
+document.getElementById('watch-btn')!.addEventListener('click', async () => {
+  if (watchHandle) { stopWatch(); return; }
+
+  if (!('showOpenFilePicker' in window)) {
+    alert('Live watch requires Chrome or Edge.');
+    return;
+  }
+
+  try {
+    const [handle] = await (window as any).showOpenFilePicker({
+      types: [{ description: 'ADIF log', accept: { 'text/plain': ['.adi', '.adif'] } }],
+      multiple: false,
+    });
+    watchHandle = handle;
+    setWatchBtn('live');
+    await pollFile();
+    watchTimer = setInterval(pollFile, POLL_MS);
+  } catch {
+    // user cancelled picker — do nothing
+  }
+});
+
 // ─── Grey line / solar terminator ────────────────────────────────────────────
 
 function getSubsolarPoint(date: Date): [number, number] {
@@ -430,6 +498,7 @@ document.getElementById('gl-btn')!.addEventListener('click', () => {
 
 const QRZ_CREDS_KEY = 'adif-map-qrz-creds';
 let qrzSession: string | null = sessionStorage.getItem('adif-map-qrz-session');
+const qrzCache = new Map<string, { grid: string | null; lat: number | null; lon: number | null; country: string | null }>();
 
 function setQrzButtonState(state: 'disconnected' | 'resolving' | 'connected') {
   const btn = document.getElementById('qrz-btn')!;
@@ -460,6 +529,7 @@ async function qrzAuth(username: string, password: string): Promise<string> {
 
 async function qrzLookup(callsign: string) {
   if (!qrzSession) return null;
+  if (qrzCache.has(callsign)) return qrzCache.get(callsign)!;
   try {
     const res = await fetch(
       `https://xmldata.qrz.com/xml/current/?s=${qrzSession}&callsign=${encodeURIComponent(callsign)}&agent=adif-map-v0.1`
@@ -476,12 +546,9 @@ async function qrzLookup(callsign: string) {
     const latStr  = xml.querySelector('lat')?.textContent;
     const lonStr  = xml.querySelector('lon')?.textContent;
     const country = xml.querySelector('country')?.textContent?.trim() || null;
-    return {
-      grid,
-      lat: latStr ? parseFloat(latStr) : null,
-      lon: lonStr ? parseFloat(lonStr) : null,
-      country,
-    };
+    const result = { grid, lat: latStr ? parseFloat(latStr) : null, lon: lonStr ? parseFloat(lonStr) : null, country };
+    qrzCache.set(callsign, result);
+    return result;
   } catch { return null; }
 }
 
