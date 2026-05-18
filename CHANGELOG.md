@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1] — 2026-05-19
+
+### Added
+- Live grey line (solar terminator) — night side polygon + orange terminator lines, updates every 60 seconds
+- GL toggle button in header to show/hide the grey line
+- `suncalc` dependency for solar position calculations
+
 ## [0.1.0] — 2026-05-18
 
 ### Added

@@ -79,6 +79,10 @@
       </div>
     </div>
     <div class="flex items-center gap-2">
+      <button id="gl-btn"
+        class="text-xs font-mono px-3 py-1.5 rounded border border-emerald-800 text-emerald-400 hover:border-emerald-600 transition-colors">
+        GL
+      </button>
       <button id="qrz-btn"
         class="text-xs font-mono px-3 py-1.5 rounded border border-[#1e2736] text-slate-500 hover:border-slate-600 hover:text-slate-300 transition-colors">
         QRZ
@@ -116,6 +120,7 @@
 <script>
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import SunCalc from 'suncalc';
 
 // ─── ADIF Parser ─────────────────────────────────────────────────────────────
 
@@ -188,6 +193,7 @@ L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
   subdomains: 'abcd', maxZoom: 19,
 }).addTo(map);
 
+const greylineGroup = L.layerGroup().addTo(map);
 const contactsGroup = L.layerGroup().addTo(map);
 let homeMarker: L.Marker | null = null;
 let homeLatLon: [number, number] = [54.15, -4.47];
@@ -330,6 +336,95 @@ document.addEventListener('drop', (e) => {
   const file = (e as DragEvent).dataTransfer?.files?.[0];
   if (file) loadFile(file);
 }, true);
+
+// ─── Grey line / solar terminator ────────────────────────────────────────────
+
+function getSubsolarPoint(date: Date): [number, number] {
+  // Scan equator for max sun altitude → subsolar longitude
+  let subLon = 0, maxAlt = -Infinity;
+  for (let lon = -180; lon <= 180; lon += 2) {
+    const alt = SunCalc.getPosition(date, 0, lon).altitude;
+    if (alt > maxAlt) { maxAlt = alt; subLon = lon; }
+  }
+  // Fine-tune to 0.2° resolution
+  for (let lon = subLon - 2; lon <= subLon + 2; lon += 0.2) {
+    const alt = SunCalc.getPosition(date, 0, lon).altitude;
+    if (alt > maxAlt) { maxAlt = alt; subLon = lon; }
+  }
+  // Scan latitudes at subsolar lon → declination
+  let subLat = 0; maxAlt = -Infinity;
+  for (let lat = -30; lat <= 30; lat += 0.5) {
+    const alt = SunCalc.getPosition(date, lat, subLon).altitude;
+    if (alt > maxAlt) { maxAlt = alt; subLat = lat; }
+  }
+  return [subLat, subLon];
+}
+
+function normLon(lon: number, ref: number): number {
+  while (lon > ref + 180) lon -= 360;
+  while (lon < ref - 180) lon += 360;
+  return lon;
+}
+
+let glVisible = true;
+
+function drawGreyline() {
+  greylineGroup.clearLayers();
+  if (!glVisible) return;
+
+  const [subLat, subLon] = getSubsolarPoint(new Date());
+  const δ = subLat * Math.PI / 180;
+  // Anti-subsolar point (centre of night side) — use as reference for longitude normalization
+  const nightLon = subLon > 0 ? subLon - 180 : subLon + 180;
+
+  const dawnArm: [number, number][] = [];
+  const duskArm: [number, number][] = [];
+
+  for (let lat = -89; lat <= 89; lat++) {
+    const φ = lat * Math.PI / 180;
+    const cosH = -Math.tan(φ) * Math.tan(δ);
+    if (Math.abs(cosH) > 1) continue; // polar day or polar night — no terminator here
+    const H = Math.acos(cosH) * 180 / Math.PI;
+    dawnArm.push([lat, normLon(subLon - H, nightLon)]);
+    duskArm.unshift([lat, normLon(subLon + H, nightLon)]); // unshift → N-to-S order
+  }
+
+  // Night polygon: dawn arm (S→N) + north cap + dusk arm (N→S) + south cap
+  const nightPoly: [number, number][] = [
+    ...dawnArm,
+    [89.9, nightLon],
+    ...duskArm,
+    [-89.9, nightLon],
+  ];
+
+  if (nightPoly.length > 4) {
+    L.polygon(nightPoly, {
+      color: 'transparent',
+      fillColor: '#000d2e',
+      fillOpacity: 0.45,
+      stroke: false,
+    }).addTo(greylineGroup);
+  }
+
+  // Terminator lines
+  const lineStyle = { color: '#f56400', weight: 1.5, opacity: 0.65 };
+  if (dawnArm.length > 1) L.polyline(dawnArm, lineStyle).addTo(greylineGroup);
+  if (duskArm.length > 1) L.polyline(duskArm, lineStyle).addTo(greylineGroup);
+}
+
+drawGreyline();
+setInterval(drawGreyline, 60_000);
+
+document.getElementById('gl-btn')!.addEventListener('click', () => {
+  glVisible = !glVisible;
+  const btn = document.getElementById('gl-btn')!;
+  if (glVisible) {
+    btn.className = 'text-xs font-mono px-3 py-1.5 rounded border border-emerald-800 text-emerald-400 hover:border-emerald-600 transition-colors';
+  } else {
+    btn.className = 'text-xs font-mono px-3 py-1.5 rounded border border-[#1e2736] text-slate-500 hover:border-slate-600 hover:text-slate-300 transition-colors';
+  }
+  drawGreyline();
+});
 
 // ─── QRZ ──────────────────────────────────────────────────────────────────────
 
