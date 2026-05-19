@@ -621,34 +621,50 @@ const DEMO_LIVE: QsoRecord[] = [
 ];
 
 let demoRunning = false;
+let demoStop = false;
 
 function runDemo() {
-  if (demoRunning) return;
-  demoRunning = true;
   const btn = document.getElementById('demo-btn')!;
-  btn.textContent = '…';
-  (btn as HTMLButtonElement).disabled = true;
-  btn.classList.add('opacity-50');
 
-  // Phase 1: burst of contacts worldwide
-  renderContacts(DEMO_BATCH);
-
-  // Phase 2: simulate live contacts arriving one by one
-  let i = 0;
-  const totalEl = document.getElementById('stat-total')!;
-  function addNext() {
-    if (i >= DEMO_LIVE.length) {
-      demoRunning = false;
-      btn.textContent = 'Demo';
-      (btn as HTMLButtonElement).disabled = false;
-      btn.classList.remove('opacity-50');
-      return;
-    }
-    totalEl.textContent = String(parseInt(totalEl.textContent || '0') + 1);
-    addLiveContacts([DEMO_LIVE[i++]]);
-    setTimeout(addNext, 950);
+  if (demoRunning) {
+    demoStop = true;
+    return;
   }
-  setTimeout(addNext, 1400);
+
+  demoRunning = true;
+  demoStop = false;
+
+  const setStopState = () => {
+    btn.textContent = 'Stop';
+    btn.className = 'text-xs font-mono px-3 py-1.5 rounded border border-rose-700 text-rose-400 hover:border-rose-600 transition-colors';
+  };
+  const setIdleState = () => {
+    btn.textContent = 'Demo';
+    btn.className = 'text-xs font-mono px-3 py-1.5 rounded border border-violet-800 text-violet-400 hover:border-violet-600 transition-colors';
+  };
+
+  setStopState();
+
+  function runCycle() {
+    if (demoStop) { demoRunning = false; demoStop = false; setIdleState(); return; }
+
+    renderContacts(DEMO_BATCH);
+
+    let i = 0;
+    const totalEl = document.getElementById('stat-total')!;
+
+    function addNext() {
+      if (demoStop) { demoRunning = false; demoStop = false; setIdleState(); return; }
+      if (i >= DEMO_LIVE.length) { setTimeout(runCycle, 2200); return; }
+      totalEl.textContent = String(parseInt(totalEl.textContent || '0') + 1);
+      addLiveContacts([DEMO_LIVE[i++]]);
+      setTimeout(addNext, 950);
+    }
+
+    setTimeout(addNext, 1400);
+  }
+
+  runCycle();
 }
 
 document.getElementById('demo-btn')!.addEventListener('click', runDemo);
