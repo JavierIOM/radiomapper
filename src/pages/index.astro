@@ -584,10 +584,6 @@ function drawGreyline() {
     }).addTo(greylineGroup);
   }
 
-  // Terminator lines
-  const lineStyle = { color: '#f56400', weight: 1.5, opacity: 0.65 };
-  if (dawnArm.length > 1) L.polyline(dawnArm, lineStyle).addTo(greylineGroup);
-  if (duskArm.length > 1) L.polyline(duskArm, lineStyle).addTo(greylineGroup);
 }
 
 drawGreyline();

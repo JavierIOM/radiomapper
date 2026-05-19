@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.5] — 2026-05-19
+
+### Changed
+- Grey line no longer draws orange terminator lines along the day/night boundary
+
 ## [0.1.4] — 2026-05-19
 
 ### Added
