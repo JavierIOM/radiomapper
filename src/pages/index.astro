@@ -36,6 +36,11 @@
 
     @keyframes live-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
     .live-pulse { animation: live-pulse 1.4s ease-in-out infinite; }
+
+    @keyframes ripple-out {
+      0%   { transform: scale(0.4); opacity: 0.7; }
+      100% { transform: scale(4);   opacity: 0; }
+    }
   </style>
 </head>
 <body class="bg-[#080b12] text-slate-100 h-full flex flex-col">
@@ -344,12 +349,95 @@ document.addEventListener('drop', (e) => {
   if (file) loadFile(file);
 }, true);
 
+// ─── Live contact animations ──────────────────────────────────────────────────
+
+function animateBeam(line: L.Polyline) {
+  // SVG stroke-dashoffset trick: draw the line from home → contact over 900ms
+  requestAnimationFrame(() => {
+    const path = (line as any)._path as SVGPathElement | undefined;
+    if (!path) return;
+    const len = path.getTotalLength();
+    path.style.strokeDasharray = `${len}`;
+    path.style.strokeDashoffset = `${len}`;
+    path.style.transition = 'stroke-dashoffset 0.9s ease-in-out';
+    requestAnimationFrame(() => { path.style.strokeDashoffset = '0'; });
+  });
+}
+
+function rippleDot(color: string) {
+  return `<div style="position:relative;width:24px;height:24px;">
+    <div style="position:absolute;inset:0;border-radius:50%;background:${color};animation:ripple-out 1.4s ease-out forwards;"></div>
+    <div style="position:absolute;inset:0;border-radius:50%;background:${color};animation:ripple-out 1.4s 0.2s ease-out forwards;"></div>
+    <div style="position:absolute;top:8px;left:8px;width:8px;height:8px;border-radius:50%;background:${color};box-shadow:0 0 8px ${color};"></div>
+  </div>`;
+}
+
+function addLiveContacts(records: ReturnType<typeof parseADIF>) {
+  for (const r of records) {
+    const band = r.band || '', mode = r.submode || r.mode || '';
+    const color = bandColor(band);
+    const rawDate = r.qso_date || '';
+    const date = rawDate.length === 8 ? `${rawDate.slice(0,4)}-${rawDate.slice(4,6)}-${rawDate.slice(6,8)}` : '';
+    const rawTime = r.time_on || '';
+    const time = rawTime.length >= 4 ? `${rawTime.slice(0,2)}:${rawTime.slice(2,4)}Z` : '';
+
+    const plotContact = (pos: [number, number], label?: string) => {
+      const line = L.polyline([homeLatLon, pos], { color, weight: 2, opacity: 0.8 }).addTo(contactsGroup);
+      animateBeam(line);
+      setTimeout(() => { (line as any).setStyle({ weight: 1, opacity: 0.35 }); }, 1000);
+
+      const marker = L.marker(pos, {
+        icon: L.divIcon({ className: '', html: rippleDot(color), iconSize: [24, 24], iconAnchor: [12, 12] }),
+      }).addTo(contactsGroup).bindPopup(popupHtml({ call: r.call, grid: r.gridsquare, band, mode, date, time, rstSent: r.rst_sent, rstRcvd: r.rst_rcvd, color, label }));
+
+      setTimeout(() => {
+        marker.setIcon(L.divIcon({ className: '', html: dot(color, 8), iconSize: [8, 8], iconAnchor: [4, 4] }));
+      }, 1500);
+
+      // Update stats
+      const el = document.getElementById('stat-mapped')!;
+      el.textContent = String(parseInt(el.textContent || '0') + 1);
+      if (band) {
+        const bandsEl = document.getElementById('stat-bands')!;
+        const current = bandsEl.textContent ? bandsEl.textContent.split(' · ') : [];
+        if (!current.includes(band)) {
+          const updated = [...current.filter(Boolean), band].sort(bandSort);
+          bandsEl.textContent = updated.join(' · ');
+          document.getElementById('stat-bands-wrap')!.classList.remove('hidden');
+          updateLegend(new Set(updated));
+        }
+      }
+    };
+
+    const grid = r.gridsquare;
+    let pos: [number, number] | null = grid && grid.length >= 4 ? gridToLatLon(grid) : null;
+
+    if (pos) {
+      plotContact(pos);
+    } else if (qrzCache.has(r.call)) {
+      const cached = qrzCache.get(r.call)!;
+      if (cached.grid) pos = gridToLatLon(cached.grid);
+      else if (cached.lat && cached.lon) pos = [cached.lat, cached.lon];
+      if (pos) plotContact(pos, `via QRZ${cached.country ? ' · ' + cached.country : ''}`);
+    } else if (qrzSession) {
+      qrzLookup(r.call).then(data => {
+        if (!data) return;
+        let p: [number, number] | null = null;
+        if (data.grid) p = gridToLatLon(data.grid);
+        else if (data.lat && data.lon) p = [data.lat, data.lon];
+        if (p) plotContact(p, `via QRZ${data.country ? ' · ' + data.country : ''}`);
+      });
+    }
+  }
+}
+
 // ─── Live file watch ─────────────────────────────────────────────────────────
 
 const POLL_MS = 15_000;
 let watchHandle: any = null;
 let watchTimer: ReturnType<typeof setInterval> | null = null;
 let lastFileText = '';
+let liveRenderCount = 0;
 
 function setWatchBtn(state: 'off' | 'live') {
   const btn = document.getElementById('watch-btn')!;
@@ -457,10 +545,10 @@ function drawGreyline() {
     duskArm.unshift([lat, normLon(subLon + H, nightLon)]); // unshift → N-to-S order
   }
 
-  // Night polygon: dawn arm (S→N) + north cap + dusk arm (N→S) + south cap
+  // Night polygon: dawn arm (S→N) + dusk arm (N→S) + south pole cap for polar night.
+  // No north cap — arms converge naturally at the polar-day boundary; adding one creates a spike.
   const nightPoly: [number, number][] = [
     ...dawnArm,
-    [89.9, nightLon],
     ...duskArm,
     [-89.9, nightLon],
   ];
