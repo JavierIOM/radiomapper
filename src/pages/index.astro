@@ -210,9 +210,44 @@ L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
 }).addTo(map);
 
 const greylineGroup = L.layerGroup().addTo(map);
-const contactsGroup = L.layerGroup().addTo(map);
+const bandLayerGroups = new Map<string, L.LayerGroup>();
+const hiddenBands = new Set<string>();
 let homeMarker: L.Marker | null = null;
 let homeLatLon: [number, number] = [54.15, -4.47];
+
+function getContactLayer(band: string): L.LayerGroup {
+  const key = band || '__none__';
+  if (!bandLayerGroups.has(key)) {
+    const lg = L.layerGroup();
+    if (!hiddenBands.has(key)) lg.addTo(map);
+    bandLayerGroups.set(key, lg);
+  }
+  return bandLayerGroups.get(key)!;
+}
+
+function clearAllContacts() {
+  bandLayerGroups.forEach(lg => { lg.clearLayers(); lg.remove(); });
+  bandLayerGroups.clear();
+  hiddenBands.clear();
+}
+
+function allBands(): string[] {
+  return [...bandLayerGroups.keys()].filter(k => k !== '__none__').sort(bandSort);
+}
+
+function toggleBand(band: string) {
+  const lg = bandLayerGroups.get(band);
+  if (!lg) return;
+  if (hiddenBands.has(band)) {
+    hiddenBands.delete(band);
+    lg.addTo(map);
+  } else {
+    hiddenBands.add(band);
+    lg.remove();
+  }
+  renderBandFilter();
+  updateLegend();
+}
 
 function setHomeMarker(latlon: [number, number], callsign: string, grid: string) {
   homeMarker?.remove();
@@ -263,7 +298,7 @@ let lastRecords: ReturnType<typeof parseADIF> = [];
 
 function renderContacts(records: ReturnType<typeof parseADIF>) {
   lastRecords = records;
-  contactsGroup.clearLayers();
+  clearAllContacts();
   if (!records.length) return;
 
   const first = records[0];
@@ -275,7 +310,6 @@ function renderContacts(records: ReturnType<typeof parseADIF>) {
   document.getElementById('header-call')!.textContent = myCallsign;
 
   let mapped = 0, unmapped = 0;
-  const bandsUsed = new Set<string>();
   const bounds = L.latLngBounds([myLatLon]);
 
   for (const r of records) {
@@ -285,12 +319,12 @@ function renderContacts(records: ReturnType<typeof parseADIF>) {
     if (!pos) { unmapped++; continue; }
 
     mapped++;
-    const band = r.band || '', mode = r.submode || r.mode || '';
+    const band = (r.band || '').toLowerCase(), mode = r.submode || r.mode || '';
     const color = bandColor(band);
-    if (band) bandsUsed.add(band);
+    const layer = getContactLayer(band);
     bounds.extend(pos);
 
-    const line = L.polyline([myLatLon, pos], { color, weight: 1, opacity: 0.35 }).addTo(contactsGroup);
+    const line = L.polyline([myLatLon, pos], { color, weight: 1, opacity: 0.35 }).addTo(layer);
     animateBeam(line);
 
     const rawDate = r.qso_date || '';
@@ -300,7 +334,7 @@ function renderContacts(records: ReturnType<typeof parseADIF>) {
 
     hoverPopup(
       L.marker(pos, { icon: L.divIcon({ className: '', html: dot(color, 8), iconSize: [8,8], iconAnchor: [4,4] }) })
-        .addTo(contactsGroup),
+        .addTo(layer),
       popupHtml({ call: r.call, grid, band, mode, date, time, rstSent: r.rst_sent, rstRcvd: r.rst_rcvd, color }),
       r.call
     );
@@ -317,33 +351,54 @@ function renderContacts(records: ReturnType<typeof parseADIF>) {
     unmappedWrap.classList.add('hidden');
   }
 
-  const bandsWrap = document.getElementById('stat-bands-wrap')!;
-  if (bandsUsed.size > 0) {
-    document.getElementById('stat-bands')!.textContent = [...bandsUsed].sort(bandSort).join(' · ');
-    bandsWrap.classList.remove('hidden');
-  } else {
-    bandsWrap.classList.add('hidden');
-  }
-
   document.getElementById('stats-bar')!.style.display = 'flex';
   document.getElementById('overlay')!.style.display = 'none';
-  updateLegend(bandsUsed);
+  renderBandFilter();
+  updateLegend();
   if (mapped > 0) map.fitBounds(bounds, { padding: [40, 40], maxZoom: 8 });
 
   // Auto-resolve unmapped contacts if QRZ is connected
   if (unmapped > 0 && qrzSession) resolveUnmapped(records);
 }
 
-// ─── Legend ───────────────────────────────────────────────────────────────────
+// ─── Band filter + legend ─────────────────────────────────────────────────────
 
-function updateLegend(bands: Set<string>) {
+function renderBandFilter() {
+  const bands = allBands();
+  const wrap = document.getElementById('stat-bands-wrap')!;
+  const el = document.getElementById('stat-bands')!;
+  if (!bands.length) { wrap.classList.add('hidden'); return; }
+  el.innerHTML = bands.map(band => {
+    const off = hiddenBands.has(band);
+    const color = off ? '#475569' : bandColor(band);
+    return `<span data-band="${band}" style="cursor:pointer;color:${color};${off ? 'opacity:0.45;text-decoration:line-through;' : ''}">${band}</span>`;
+  }).join('<span style="color:#334155"> · </span>');
+  wrap.classList.remove('hidden');
+}
+
+function updateLegend() {
   const el = document.getElementById('legend')!;
-  if (!bands.size) { el.classList.add('hidden'); return; }
-  el.innerHTML = [...bands].sort(bandSort).map(band =>
-    `<div style="display:flex;align-items:center;gap:7px;margin-bottom:4px;">${dot(bandColor(band), 10)}<span>${band}</span></div>`
-  ).join('');
+  const bands = allBands();
+  if (!bands.length) { el.classList.add('hidden'); return; }
+  el.innerHTML = bands.map(band => {
+    const off = hiddenBands.has(band);
+    const color = off ? '#475569' : bandColor(band);
+    return `<div data-band="${band}" style="display:flex;align-items:center;gap:7px;margin-bottom:4px;cursor:pointer;opacity:${off ? 0.4 : 1};">
+      ${dot(color, 10)}<span style="${off ? 'text-decoration:line-through;' : ''}">${band}</span>
+    </div>`;
+  }).join('');
   el.classList.remove('hidden');
 }
+
+document.getElementById('stat-bands')!.addEventListener('click', (e) => {
+  const span = (e.target as HTMLElement).closest<HTMLElement>('[data-band]');
+  if (span?.dataset.band) toggleBand(span.dataset.band);
+});
+
+document.getElementById('legend')!.addEventListener('click', (e) => {
+  const div = (e.target as HTMLElement).closest<HTMLElement>('[data-band]');
+  if (div?.dataset.band) toggleBand(div.dataset.band);
+});
 
 // ─── File loading ─────────────────────────────────────────────────────────────
 
@@ -393,22 +448,23 @@ function rippleDot(color: string) {
 
 function addLiveContacts(records: ReturnType<typeof parseADIF>) {
   for (const r of records) {
-    const band = r.band || '', mode = r.submode || r.mode || '';
+    const band = (r.band || '').toLowerCase(), mode = r.submode || r.mode || '';
     const color = bandColor(band);
+    const layer = getContactLayer(band);
     const rawDate = r.qso_date || '';
     const date = rawDate.length === 8 ? `${rawDate.slice(0,4)}-${rawDate.slice(4,6)}-${rawDate.slice(6,8)}` : '';
     const rawTime = r.time_on || '';
     const time = rawTime.length >= 4 ? `${rawTime.slice(0,2)}:${rawTime.slice(2,4)}Z` : '';
 
     const plotContact = (pos: [number, number], label?: string) => {
-      const line = L.polyline([homeLatLon, pos], { color, weight: 2, opacity: 0.8 }).addTo(contactsGroup);
+      const line = L.polyline([homeLatLon, pos], { color, weight: 2, opacity: 0.8 }).addTo(layer);
       animateBeam(line);
       setTimeout(() => { (line as any).setStyle({ weight: 1, opacity: 0.35 }); }, 1000);
 
       const marker = hoverPopup(
         L.marker(pos, {
           icon: L.divIcon({ className: '', html: rippleDot(color), iconSize: [24, 24], iconAnchor: [12, 12] }),
-        }).addTo(contactsGroup),
+        }).addTo(layer),
         popupHtml({ call: r.call, grid: r.gridsquare, band, mode, date, time, rstSent: r.rst_sent, rstRcvd: r.rst_rcvd, color, label }),
         r.call
       );
@@ -417,19 +473,10 @@ function addLiveContacts(records: ReturnType<typeof parseADIF>) {
         marker.setIcon(L.divIcon({ className: '', html: dot(color, 8), iconSize: [8, 8], iconAnchor: [4, 4] }));
       }, 1500);
 
-      // Update stats
-      const el = document.getElementById('stat-mapped')!;
-      el.textContent = String(parseInt(el.textContent || '0') + 1);
-      if (band) {
-        const bandsEl = document.getElementById('stat-bands')!;
-        const current = bandsEl.textContent ? bandsEl.textContent.split(' · ') : [];
-        if (!current.includes(band)) {
-          const updated = [...current.filter(Boolean), band].sort(bandSort);
-          bandsEl.textContent = updated.join(' · ');
-          document.getElementById('stat-bands-wrap')!.classList.remove('hidden');
-          updateLegend(new Set(updated));
-        }
-      }
+      const mappedEl = document.getElementById('stat-mapped')!;
+      mappedEl.textContent = String(parseInt(mappedEl.textContent || '0') + 1);
+      renderBandFilter();
+      updateLegend();
     };
 
     const grid = r.gridsquare;
@@ -760,10 +807,11 @@ async function resolveUnmapped(records: ReturnType<typeof parseADIF>) {
     if (!pos) continue;
 
     resolved++;
-    const band = r.band || '', mode = r.submode || r.mode || '';
+    const band = (r.band || '').toLowerCase(), mode = r.submode || r.mode || '';
     const color = bandColor(band);
+    const layer = getContactLayer(band);
 
-    L.polyline([homeLatLon, pos], { color, weight: 1, opacity: 0.2, dashArray: '4 4' }).addTo(contactsGroup);
+    L.polyline([homeLatLon, pos], { color, weight: 1, opacity: 0.2, dashArray: '4 4' }).addTo(layer);
 
     const rawDate = r.qso_date || '';
     const date = rawDate.length === 8 ? `${rawDate.slice(0,4)}-${rawDate.slice(4,6)}-${rawDate.slice(6,8)}` : '';
@@ -772,7 +820,7 @@ async function resolveUnmapped(records: ReturnType<typeof parseADIF>) {
 
     hoverPopup(
       L.marker(pos, { icon: L.divIcon({ className: '', html: qrzDot(color), iconSize: [14,14], iconAnchor: [7,7] }) })
-        .addTo(contactsGroup),
+        .addTo(layer),
       popupHtml({
         call: r.call,
         grid: data.grid || (data.lat ? `${data.lat.toFixed(1)}°, ${data.lon!.toFixed(1)}°` : ''),

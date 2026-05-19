@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.1.6] — 2026-05-20
+
+### Added
+- Band filter: click any band name in the stats bar or legend to toggle that band on/off — hides both markers and lines
+- Both the stats bar and the legend are now clickable and stay in sync
+
+### Fixed
+- Duplicate band names (e.g. `80m` and `80M`) caused by mixed-case ADIF files — all band names now normalised to lowercase
+
 ## [0.1.5] — 2026-05-19
 
 ### Changed
