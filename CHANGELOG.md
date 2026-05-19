@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.1.3] — 2026-05-19
+
+### Added
+- Hover popups on all markers — callsign details appear on mouseover, no click needed
+- Demo button — cycles continuously through a worldwide contact sequence (18-contact burst + 6 live arrivals), click Stop to end
+- Line draw animation on file load — all contact lines animate outward from home QTH simultaneously
+
+### Fixed
+- TypeScript implicit `any` on `parseADIF` text parameter
+- Removed unused `liveRenderCount` variable
+
 ## [0.1.2] — 2026-05-19
 
 ### Added

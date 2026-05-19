@@ -217,14 +217,15 @@ let homeLatLon: [number, number] = [54.15, -4.47];
 function setHomeMarker(latlon: [number, number], callsign: string, grid: string) {
   homeMarker?.remove();
   homeLatLon = latlon;
-  homeMarker = L.marker(latlon, {
+  const m = L.marker(latlon, {
     icon: L.divIcon({
       className: '',
       html: `<div style="width:14px;height:14px;background:#f56400;border:2px solid #fff;border-radius:50%;box-shadow:0 0 8px #f5640088;"></div>`,
       iconSize: [14, 14], iconAnchor: [7, 7],
     }),
     zIndexOffset: 1000,
-  }).addTo(map).bindPopup(popupHtml({ call: callsign, grid, label: 'My station', color: '#f56400' }));
+  }).addTo(map);
+  homeMarker = hoverPopup(m, popupHtml({ call: callsign, grid, label: 'My station', color: '#f56400' }));
 }
 
 // ─── Popup ────────────────────────────────────────────────────────────────────
@@ -244,6 +245,13 @@ function popupHtml({ call, grid, band, mode, date, time, rstSent, rstRcvd, label
     <div style="font-size:14px;font-weight:700;color:#f1f5f9;margin-bottom:4px;">${call}</div>
     ${rows.join('')}
   </div>`;
+}
+
+function hoverPopup(marker: L.Marker, html: string): L.Marker {
+  marker.bindPopup(html, { autoPan: false });
+  marker.on('mouseover', () => marker.openPopup());
+  marker.on('mouseout', () => marker.closePopup());
+  return marker;
 }
 
 // ─── Render contacts ──────────────────────────────────────────────────────────
@@ -287,9 +295,11 @@ function renderContacts(records: ReturnType<typeof parseADIF>) {
     const rawTime = r.time_on || '';
     const time = rawTime.length >= 4 ? `${rawTime.slice(0,2)}:${rawTime.slice(2,4)}Z` : '';
 
-    L.marker(pos, { icon: L.divIcon({ className: '', html: dot(color, 8), iconSize: [8,8], iconAnchor: [4,4] }) })
-      .addTo(contactsGroup)
-      .bindPopup(popupHtml({ call: r.call, grid, band, mode, date, time, rstSent: r.rst_sent, rstRcvd: r.rst_rcvd, color }));
+    hoverPopup(
+      L.marker(pos, { icon: L.divIcon({ className: '', html: dot(color, 8), iconSize: [8,8], iconAnchor: [4,4] }) })
+        .addTo(contactsGroup),
+      popupHtml({ call: r.call, grid, band, mode, date, time, rstSent: r.rst_sent, rstRcvd: r.rst_rcvd, color })
+    );
   }
 
   document.getElementById('stat-total')!.textContent = String(records.length);
@@ -391,9 +401,12 @@ function addLiveContacts(records: ReturnType<typeof parseADIF>) {
       animateBeam(line);
       setTimeout(() => { (line as any).setStyle({ weight: 1, opacity: 0.35 }); }, 1000);
 
-      const marker = L.marker(pos, {
-        icon: L.divIcon({ className: '', html: rippleDot(color), iconSize: [24, 24], iconAnchor: [12, 12] }),
-      }).addTo(contactsGroup).bindPopup(popupHtml({ call: r.call, grid: r.gridsquare, band, mode, date, time, rstSent: r.rst_sent, rstRcvd: r.rst_rcvd, color, label }));
+      const marker = hoverPopup(
+        L.marker(pos, {
+          icon: L.divIcon({ className: '', html: rippleDot(color), iconSize: [24, 24], iconAnchor: [12, 12] }),
+        }).addTo(contactsGroup),
+        popupHtml({ call: r.call, grid: r.gridsquare, band, mode, date, time, rstSent: r.rst_sent, rstRcvd: r.rst_rcvd, color, label })
+      );
 
       setTimeout(() => {
         marker.setIcon(L.divIcon({ className: '', html: dot(color, 8), iconSize: [8, 8], iconAnchor: [4, 4] }));
@@ -756,15 +769,17 @@ async function resolveUnmapped(records: ReturnType<typeof parseADIF>) {
     const rawTime = r.time_on || '';
     const time = rawTime.length >= 4 ? `${rawTime.slice(0,2)}:${rawTime.slice(2,4)}Z` : '';
 
-    L.marker(pos, { icon: L.divIcon({ className: '', html: qrzDot(color), iconSize: [14,14], iconAnchor: [7,7] }) })
-      .addTo(contactsGroup)
-      .bindPopup(popupHtml({
+    hoverPopup(
+      L.marker(pos, { icon: L.divIcon({ className: '', html: qrzDot(color), iconSize: [14,14], iconAnchor: [7,7] }) })
+        .addTo(contactsGroup),
+      popupHtml({
         call: r.call,
         grid: data.grid || (data.lat ? `${data.lat.toFixed(1)}°, ${data.lon!.toFixed(1)}°` : ''),
         band, mode, date, time,
         rstSent: r.rst_sent, rstRcvd: r.rst_rcvd, color,
         label: `via QRZ${data.country ? ' · ' + data.country : ''}`,
-      }));
+      })
+    );
   }
 
   // Update stats counters
