@@ -225,7 +225,7 @@ function setHomeMarker(latlon: [number, number], callsign: string, grid: string)
     }),
     zIndexOffset: 1000,
   }).addTo(map);
-  homeMarker = hoverPopup(m, popupHtml({ call: callsign, grid, label: 'My station', color: '#f56400' }));
+  homeMarker = hoverPopup(m, popupHtml({ call: callsign, grid, label: 'My station', color: '#f56400' }), callsign);
 }
 
 // ─── Popup ────────────────────────────────────────────────────────────────────
@@ -247,10 +247,13 @@ function popupHtml({ call, grid, band, mode, date, time, rstSent, rstRcvd, label
   </div>`;
 }
 
-function hoverPopup(marker: L.Marker, html: string): L.Marker {
+function hoverPopup(marker: L.Marker, html: string, callsign?: string): L.Marker {
   marker.bindPopup(html, { autoPan: false });
   marker.on('mouseover', () => marker.openPopup());
   marker.on('mouseout', () => marker.closePopup());
+  if (callsign) {
+    marker.on('click', () => window.open(`https://www.qrz.com/db/${encodeURIComponent(callsign)}`, '_blank', 'noopener'));
+  }
   return marker;
 }
 
@@ -298,7 +301,8 @@ function renderContacts(records: ReturnType<typeof parseADIF>) {
     hoverPopup(
       L.marker(pos, { icon: L.divIcon({ className: '', html: dot(color, 8), iconSize: [8,8], iconAnchor: [4,4] }) })
         .addTo(contactsGroup),
-      popupHtml({ call: r.call, grid, band, mode, date, time, rstSent: r.rst_sent, rstRcvd: r.rst_rcvd, color })
+      popupHtml({ call: r.call, grid, band, mode, date, time, rstSent: r.rst_sent, rstRcvd: r.rst_rcvd, color }),
+      r.call
     );
   }
 
@@ -405,7 +409,8 @@ function addLiveContacts(records: ReturnType<typeof parseADIF>) {
         L.marker(pos, {
           icon: L.divIcon({ className: '', html: rippleDot(color), iconSize: [24, 24], iconAnchor: [12, 12] }),
         }).addTo(contactsGroup),
-        popupHtml({ call: r.call, grid: r.gridsquare, band, mode, date, time, rstSent: r.rst_sent, rstRcvd: r.rst_rcvd, color, label })
+        popupHtml({ call: r.call, grid: r.gridsquare, band, mode, date, time, rstSent: r.rst_sent, rstRcvd: r.rst_rcvd, color, label }),
+        r.call
       );
 
       setTimeout(() => {
@@ -778,7 +783,8 @@ async function resolveUnmapped(records: ReturnType<typeof parseADIF>) {
         band, mode, date, time,
         rstSent: r.rst_sent, rstRcvd: r.rst_rcvd, color,
         label: `via QRZ${data.country ? ' · ' + data.country : ''}`,
-      })
+      }),
+      r.call
     );
   }
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.4] — 2026-05-19
+
+### Added
+- Click any marker to open that operator's QRZ.com page in a new tab
+
 ## [0.1.3] — 2026-05-19
 
 ### Added
