@@ -403,6 +403,13 @@ document.getElementById('legend')!.addEventListener('click', (e) => {
 // ─── File loading ─────────────────────────────────────────────────────────────
 
 function loadFile(file: File) {
+  if (demoRunning) {
+    demoStop = true;
+    demoRunning = false;
+    const btn = document.getElementById('demo-btn')!;
+    btn.textContent = 'Demo';
+    btn.className = 'text-xs font-mono px-3 py-1.5 rounded border border-violet-800 text-violet-400 hover:border-violet-600 transition-colors';
+  }
   const reader = new FileReader();
   reader.onload = (e) => renderContacts(parseADIF(e.target!.result as string));
   reader.readAsText(file);
@@ -652,7 +659,7 @@ document.getElementById('gl-btn')!.addEventListener('click', () => {
 type QsoRecord = ReturnType<typeof parseADIF>[number];
 
 const DEMO_BATCH: QsoRecord[] = [
-  { station_callsign: '2D0PEY', my_gridsquare: 'IO74RE', call: 'G4XYZ',  gridsquare: 'IO91', band: '40m', mode: 'FT8', submode: 'FT8', qso_date: '20260519', time_on: '1202', rst_sent: '-05', rst_rcvd: '+02' },
+  { station_callsign: 'G0DEMO', my_gridsquare: 'IO74RE', call: 'G4XYZ',  gridsquare: 'IO91', band: '40m', mode: 'FT8', submode: 'FT8', qso_date: '20260519', time_on: '1202', rst_sent: '-05', rst_rcvd: '+02' },
   { call: 'PA3ABC', gridsquare: 'JO22', band: '20m', mode: 'FT8', submode: 'FT8', qso_date: '20260519', time_on: '1210', rst_sent: '-12', rst_rcvd: '-08' },
   { call: 'DL5XYZ', gridsquare: 'JO51', band: '20m', mode: 'FT8', submode: 'FT8', qso_date: '20260519', time_on: '1214', rst_sent: '-09', rst_rcvd: '-14' },
   { call: 'F4ABC',  gridsquare: 'JN03', band: '40m', mode: 'FT8', submode: 'FT8', qso_date: '20260519', time_on: '1218', rst_sent: '+01', rst_rcvd: '-03' },

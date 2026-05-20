@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.7] — 2026-05-20
+
+### Fixed
+- Loading a real ADIF file now stops the demo cycle immediately — previously the demo's pending timer would fire and overwrite the user's contacts
+- Demo callsign changed from 2D0PEY to G0DEMO so visitors don't think they're seeing the site owner's real log
+
 ## [0.1.6] — 2026-05-20
 
 ### Added
