@@ -87,11 +87,7 @@
       </div>
     </div>
     <div class="flex items-center gap-2">
-      <button id="demo-btn"
-        class="text-xs font-mono px-3 py-1.5 rounded border border-violet-800 text-violet-400 hover:border-violet-600 transition-colors">
-        Demo
-      </button>
-      <button id="watch-btn"
+<button id="watch-btn"
         class="text-xs font-mono px-3 py-1.5 rounded border border-[#1e2736] text-slate-500 hover:border-slate-600 hover:text-slate-300 transition-colors">
         Watch
       </button>
@@ -403,13 +399,6 @@ document.getElementById('legend')!.addEventListener('click', (e) => {
 // ─── File loading ─────────────────────────────────────────────────────────────
 
 function loadFile(file: File) {
-  if (demoRunning) {
-    demoStop = true;
-    demoRunning = false;
-    const btn = document.getElementById('demo-btn')!;
-    btn.textContent = 'Demo';
-    btn.className = 'text-xs font-mono px-3 py-1.5 rounded border border-violet-800 text-violet-400 hover:border-violet-600 transition-colors';
-  }
   const reader = new FileReader();
   reader.onload = (e) => renderContacts(parseADIF(e.target!.result as string));
   reader.readAsText(file);
@@ -443,69 +432,6 @@ function animateBeam(line: L.Polyline) {
     path.style.transition = 'stroke-dashoffset 0.9s ease-in-out';
     requestAnimationFrame(() => { path.style.strokeDashoffset = '0'; });
   });
-}
-
-function rippleDot(color: string) {
-  return `<div style="position:relative;width:24px;height:24px;">
-    <div style="position:absolute;inset:0;border-radius:50%;background:${color};animation:ripple-out 1.4s ease-out forwards;"></div>
-    <div style="position:absolute;inset:0;border-radius:50%;background:${color};animation:ripple-out 1.4s 0.2s ease-out forwards;"></div>
-    <div style="position:absolute;top:8px;left:8px;width:8px;height:8px;border-radius:50%;background:${color};box-shadow:0 0 8px ${color};"></div>
-  </div>`;
-}
-
-function addLiveContacts(records: ReturnType<typeof parseADIF>) {
-  for (const r of records) {
-    const band = (r.band || '').toLowerCase(), mode = r.submode || r.mode || '';
-    const color = bandColor(band);
-    const layer = getContactLayer(band);
-    const rawDate = r.qso_date || '';
-    const date = rawDate.length === 8 ? `${rawDate.slice(0,4)}-${rawDate.slice(4,6)}-${rawDate.slice(6,8)}` : '';
-    const rawTime = r.time_on || '';
-    const time = rawTime.length >= 4 ? `${rawTime.slice(0,2)}:${rawTime.slice(2,4)}Z` : '';
-
-    const plotContact = (pos: [number, number], label?: string) => {
-      const line = L.polyline([homeLatLon, pos], { color, weight: 2, opacity: 0.8 }).addTo(layer);
-      animateBeam(line);
-      setTimeout(() => { (line as any).setStyle({ weight: 1, opacity: 0.35 }); }, 1000);
-
-      const marker = hoverPopup(
-        L.marker(pos, {
-          icon: L.divIcon({ className: '', html: rippleDot(color), iconSize: [24, 24], iconAnchor: [12, 12] }),
-        }).addTo(layer),
-        popupHtml({ call: r.call, grid: r.gridsquare, band, mode, date, time, rstSent: r.rst_sent, rstRcvd: r.rst_rcvd, color, label }),
-        r.call
-      );
-
-      setTimeout(() => {
-        marker.setIcon(L.divIcon({ className: '', html: dot(color, 8), iconSize: [8, 8], iconAnchor: [4, 4] }));
-      }, 1500);
-
-      const mappedEl = document.getElementById('stat-mapped')!;
-      mappedEl.textContent = String(parseInt(mappedEl.textContent || '0') + 1);
-      renderBandFilter();
-      updateLegend();
-    };
-
-    const grid = r.gridsquare;
-    let pos: [number, number] | null = grid && grid.length >= 4 ? gridToLatLon(grid) : null;
-
-    if (pos) {
-      plotContact(pos);
-    } else if (qrzCache.has(r.call)) {
-      const cached = qrzCache.get(r.call)!;
-      if (cached.grid) pos = gridToLatLon(cached.grid);
-      else if (cached.lat && cached.lon) pos = [cached.lat, cached.lon];
-      if (pos) plotContact(pos, `via QRZ${cached.country ? ' · ' + cached.country : ''}`);
-    } else if (qrzSession) {
-      qrzLookup(r.call).then(data => {
-        if (!data) return;
-        let p: [number, number] | null = null;
-        if (data.grid) p = gridToLatLon(data.grid);
-        else if (data.lat && data.lon) p = [data.lat, data.lon];
-        if (p) plotContact(p, `via QRZ${data.country ? ' · ' + data.country : ''}`);
-      });
-    }
-  }
 }
 
 // ─── Live file watch ─────────────────────────────────────────────────────────
@@ -653,89 +579,6 @@ document.getElementById('gl-btn')!.addEventListener('click', () => {
   }
   drawGreyline();
 });
-
-// ─── Demo ─────────────────────────────────────────────────────────────────────
-
-type QsoRecord = ReturnType<typeof parseADIF>[number];
-
-const DEMO_BATCH: QsoRecord[] = [
-  { station_callsign: 'G0DEMO', my_gridsquare: 'IO74RE', call: 'G4XYZ',  gridsquare: 'IO91', band: '40m', mode: 'FT8', submode: 'FT8', qso_date: '20260519', time_on: '1202', rst_sent: '-05', rst_rcvd: '+02' },
-  { call: 'PA3ABC', gridsquare: 'JO22', band: '20m', mode: 'FT8', submode: 'FT8', qso_date: '20260519', time_on: '1210', rst_sent: '-12', rst_rcvd: '-08' },
-  { call: 'DL5XYZ', gridsquare: 'JO51', band: '20m', mode: 'FT8', submode: 'FT8', qso_date: '20260519', time_on: '1214', rst_sent: '-09', rst_rcvd: '-14' },
-  { call: 'F4ABC',  gridsquare: 'JN03', band: '40m', mode: 'FT8', submode: 'FT8', qso_date: '20260519', time_on: '1218', rst_sent: '+01', rst_rcvd: '-03' },
-  { call: 'IK1XYZ', gridsquare: 'JN35', band: '20m', mode: 'SSB',             qso_date: '20260519', time_on: '1222', rst_sent: '59',  rst_rcvd: '57'  },
-  { call: 'SP5ABC', gridsquare: 'KO02', band: '40m', mode: 'FT8', submode: 'FT8', qso_date: '20260519', time_on: '1225', rst_sent: '-11', rst_rcvd: '-15' },
-  { call: 'OH2XYZ', gridsquare: 'KP20', band: '80m', mode: 'FT8', submode: 'FT8', qso_date: '20260519', time_on: '1229', rst_sent: '+03', rst_rcvd: '-02' },
-  { call: 'EA4ABC', gridsquare: 'IN80', band: '20m', mode: 'FT8', submode: 'FT8', qso_date: '20260519', time_on: '1233', rst_sent: '-14', rst_rcvd: '-10' },
-  { call: 'UA9XYZ', gridsquare: 'NO43', band: '40m', mode: 'CW',              qso_date: '20260519', time_on: '1237', rst_sent: '599', rst_rcvd: '569' },
-  { call: 'W1AW',   gridsquare: 'FN31', band: '20m', mode: 'FT8', submode: 'FT8', qso_date: '20260519', time_on: '1240', rst_sent: '-18', rst_rcvd: '-22' },
-  { call: 'W6XYZ',  gridsquare: 'DM04', band: '17m', mode: 'FT8', submode: 'FT8', qso_date: '20260519', time_on: '1244', rst_sent: '-20', rst_rcvd: '-16' },
-  { call: 'VE3ABC', gridsquare: 'EN82', band: '20m', mode: 'FT8', submode: 'FT8', qso_date: '20260519', time_on: '1248', rst_sent: '-16', rst_rcvd: '-19' },
-  { call: 'PY2ABC', gridsquare: 'GG66', band: '20m', mode: 'FT8', submode: 'FT8', qso_date: '20260519', time_on: '1252', rst_sent: '-15', rst_rcvd: '-20' },
-  { call: 'LU3XYZ', gridsquare: 'GF05', band: '17m', mode: 'FT8', submode: 'FT8', qso_date: '20260519', time_on: '1256', rst_sent: '-17', rst_rcvd: '-23' },
-  { call: 'ZS6ABC', gridsquare: 'KG44', band: '20m', mode: 'FT8', submode: 'FT8', qso_date: '20260519', time_on: '1300', rst_sent: '-13', rst_rcvd: '-16' },
-  { call: 'JA1XYZ', gridsquare: 'PM95', band: '15m', mode: 'FT8', submode: 'FT8', qso_date: '20260519', time_on: '1304', rst_sent: '-21', rst_rcvd: '-19' },
-  { call: 'VK2ABC', gridsquare: 'QF56', band: '15m', mode: 'FT8', submode: 'FT8', qso_date: '20260519', time_on: '1308', rst_sent: '-24', rst_rcvd: '-22' },
-  { call: 'ZL2XYZ', gridsquare: 'RF70', band: '15m', mode: 'FT8', submode: 'FT8', qso_date: '20260519', time_on: '1312', rst_sent: '-26', rst_rcvd: '-24' },
-];
-
-const DEMO_LIVE: QsoRecord[] = [
-  { call: 'HL2ABC', gridsquare: 'PM37', band: '15m', mode: 'FT8', submode: 'FT8', qso_date: '20260519', time_on: '1320', rst_sent: '-19', rst_rcvd: '-22' },
-  { call: 'BY1XYZ', gridsquare: 'OM89', band: '17m', mode: 'FT8', submode: 'FT8', qso_date: '20260519', time_on: '1321', rst_sent: '-22', rst_rcvd: '-18' },
-  { call: '4X1ABC', gridsquare: 'KM72', band: '20m', mode: 'FT8', submode: 'FT8', qso_date: '20260519', time_on: '1322', rst_sent: '-16', rst_rcvd: '-11' },
-  { call: 'VU2ABC', gridsquare: 'MK68', band: '17m', mode: 'FT8', submode: 'FT8', qso_date: '20260519', time_on: '1323', rst_sent: '-18', rst_rcvd: '-15' },
-  { call: 'KH6XYZ', gridsquare: 'BL11', band: '20m', mode: 'FT8', submode: 'FT8', qso_date: '20260519', time_on: '1324', rst_sent: '-22', rst_rcvd: '-20' },
-  { call: 'CE3ABC', gridsquare: 'FF46', band: '17m', mode: 'FT8', submode: 'FT8', qso_date: '20260519', time_on: '1325', rst_sent: '-20', rst_rcvd: '-17' },
-];
-
-let demoRunning = false;
-let demoStop = false;
-
-function runDemo() {
-  const btn = document.getElementById('demo-btn')!;
-
-  if (demoRunning) {
-    demoStop = true;
-    return;
-  }
-
-  demoRunning = true;
-  demoStop = false;
-
-  const setStopState = () => {
-    btn.textContent = 'Stop';
-    btn.className = 'text-xs font-mono px-3 py-1.5 rounded border border-rose-700 text-rose-400 hover:border-rose-600 transition-colors';
-  };
-  const setIdleState = () => {
-    btn.textContent = 'Demo';
-    btn.className = 'text-xs font-mono px-3 py-1.5 rounded border border-violet-800 text-violet-400 hover:border-violet-600 transition-colors';
-  };
-
-  setStopState();
-
-  function runCycle() {
-    if (demoStop) { demoRunning = false; demoStop = false; setIdleState(); return; }
-
-    renderContacts(DEMO_BATCH);
-
-    let i = 0;
-    const totalEl = document.getElementById('stat-total')!;
-
-    function addNext() {
-      if (demoStop) { demoRunning = false; demoStop = false; setIdleState(); return; }
-      if (i >= DEMO_LIVE.length) { setTimeout(runCycle, 2200); return; }
-      totalEl.textContent = String(parseInt(totalEl.textContent || '0') + 1);
-      addLiveContacts([DEMO_LIVE[i++]]);
-      setTimeout(addNext, 950);
-    }
-
-    setTimeout(addNext, 1400);
-  }
-
-  runCycle();
-}
-
-document.getElementById('demo-btn')!.addEventListener('click', runDemo);
 
 // ─── QRZ ──────────────────────────────────────────────────────────────────────
 

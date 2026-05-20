@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.8] — 2026-05-20
+
+### Removed
+- Demo mode removed entirely — it caused confusion with users thinking they were seeing real contacts
+
 ## [0.1.7] — 2026-05-20
 
 ### Fixed
