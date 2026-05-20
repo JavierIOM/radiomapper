@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.9] — 2026-05-20
+
+### Added
+- Welcome modal on first page load — explains what the site does and how to use each feature, with a "Don't show again" option
+
 ## [0.1.8] — 2026-05-20
 
 ### Removed

@@ -74,6 +74,57 @@
     </div>
   </div>
 
+  <!-- Welcome Modal -->
+  <div id="welcome-modal" class="fixed inset-0 z-[3000] flex items-center justify-center bg-black/70 backdrop-blur-sm">
+    <div class="bg-[#0d1117] border border-[#1e2736] rounded-xl shadow-2xl w-full max-w-lg mx-4">
+      <div class="px-6 pt-6 pb-5 border-b border-[#1e2736]">
+        <div class="flex items-center gap-3 mb-1">
+          <svg class="w-5 h-5 text-[#f56400] shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 6.75V15m6-6v8.25m.503 3.498 4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 0 0-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c-.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0Z" />
+          </svg>
+          <h2 class="font-mono font-bold text-slate-100 text-base tracking-wide">QSO Map</h2>
+        </div>
+        <p class="text-slate-400 text-xs font-mono mt-2 leading-relaxed">Visualise your amateur radio log on a world map. Load any ADIF file and see every contact plotted by band, with lines drawn from your home QTH to each worked station.</p>
+      </div>
+      <div class="px-6 py-4 space-y-3">
+        <div class="flex gap-3 items-start">
+          <span class="text-[#f56400] font-mono text-xs font-bold mt-0.5 shrink-0 w-20">Load ADIF</span>
+          <p class="text-slate-400 text-xs font-mono leading-relaxed">Drag and drop your <code class="text-slate-300">.adi</code> or <code class="text-slate-300">.adif</code> file anywhere on the page, or use the <span class="text-slate-300">Load ADIF</span> button. Works with WSJT-X, Minos, and most loggers.</p>
+        </div>
+        <div class="flex gap-3 items-start">
+          <span class="text-[#f56400] font-mono text-xs font-bold mt-0.5 shrink-0 w-20">Live Watch</span>
+          <p class="text-slate-400 text-xs font-mono leading-relaxed">Click <span class="text-slate-300">Watch</span> to monitor your WSJT-X log in real time — the map updates every 15 seconds as new contacts are logged. Chrome and Edge only.</p>
+        </div>
+        <div class="flex gap-3 items-start">
+          <span class="text-[#f56400] font-mono text-xs font-bold mt-0.5 shrink-0 w-20">Bands</span>
+          <p class="text-slate-400 text-xs font-mono leading-relaxed">Click any band in the stats bar or legend to toggle it on and off. Useful for large multi-band logs where you want to focus on one slice.</p>
+        </div>
+        <div class="flex gap-3 items-start">
+          <span class="text-[#f56400] font-mono text-xs font-bold mt-0.5 shrink-0 w-20">Markers</span>
+          <p class="text-slate-400 text-xs font-mono leading-relaxed">Hover a marker to see callsign, grid, band, mode and time. Click it to open that operator's <span class="text-slate-300">QRZ.com</span> page in a new tab.</p>
+        </div>
+        <div class="flex gap-3 items-start">
+          <span class="text-[#f56400] font-mono text-xs font-bold mt-0.5 shrink-0 w-20">QRZ</span>
+          <p class="text-slate-400 text-xs font-mono leading-relaxed">Contacts with no grid square can be resolved via the QRZ XML API. Click <span class="text-slate-300">QRZ</span> and enter your credentials — they stay in your browser, never sent anywhere else.</p>
+        </div>
+        <div class="flex gap-3 items-start">
+          <span class="text-[#f56400] font-mono text-xs font-bold mt-0.5 shrink-0 w-20">Grey Line</span>
+          <p class="text-slate-400 text-xs font-mono leading-relaxed">The <span class="text-slate-300">GL</span> button toggles the live solar terminator overlay, showing the day/night boundary updated in real time.</p>
+        </div>
+      </div>
+      <div class="px-6 pb-5 pt-2 flex items-center justify-between">
+        <label class="flex items-center gap-2 cursor-pointer select-none">
+          <input type="checkbox" id="welcome-dont-show" class="accent-[#f56400]" />
+          <span class="text-xs font-mono text-slate-500">Don't show again</span>
+        </label>
+        <button id="welcome-close"
+          class="bg-[#f56400] hover:bg-[#d94f00] text-white text-sm font-mono font-semibold px-5 py-2 rounded transition-colors">
+          Got it
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- Header -->
   <header class="flex items-center justify-between px-4 h-12 bg-[#0d1117] border-b border-[#1e2736] shrink-0 z-10">
     <div class="flex items-center gap-3">
@@ -701,6 +752,19 @@ const hideModal = () => { modal.style.display = 'none'; };
 document.getElementById('qrz-btn')!.addEventListener('click', showModal);
 document.getElementById('qrz-modal-close')!.addEventListener('click', hideModal);
 modal.addEventListener('click', (e) => { if (e.target === modal) hideModal(); });
+
+// ─── Welcome modal ────────────────────────────────────────────────────────────
+
+const welcomeModal = document.getElementById('welcome-modal')!;
+function closeWelcome() {
+  if ((document.getElementById('welcome-dont-show') as HTMLInputElement).checked) {
+    localStorage.setItem('qsomap_welcome_seen', '1');
+  }
+  welcomeModal.style.display = 'none';
+}
+document.getElementById('welcome-close')!.addEventListener('click', closeWelcome);
+welcomeModal.addEventListener('click', (e) => { if (e.target === welcomeModal) closeWelcome(); });
+if (localStorage.getItem('qsomap_welcome_seen')) welcomeModal.style.display = 'none';
 
 document.getElementById('qrz-password')!.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') document.getElementById('qrz-connect-btn')!.click();
