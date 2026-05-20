@@ -111,6 +111,10 @@
           <span class="text-[#f56400] font-mono text-xs font-bold mt-0.5 shrink-0 w-20">Grey Line</span>
           <p class="text-slate-400 text-xs font-mono leading-relaxed">The <span class="text-slate-300">GL</span> button toggles the live solar terminator overlay, showing the day/night boundary updated in real time.</p>
         </div>
+        <div class="flex gap-3 items-start">
+          <span class="text-[#f56400] font-mono text-xs font-bold mt-0.5 shrink-0 w-20">Map Style</span>
+          <p class="text-slate-400 text-xs font-mono leading-relaxed">The <span class="text-slate-300">Map</span> button lets you switch between Dark Matter, Positron, OSM Standard, and Satellite base maps. Your choice is remembered between visits.</p>
+        </div>
       </div>
       <div class="px-6 pb-5 pt-2 flex items-center justify-between">
         <label class="flex items-center gap-2 cursor-pointer select-none">
@@ -138,7 +142,7 @@
       </div>
     </div>
     <div class="flex items-center gap-2">
-<button id="watch-btn"
+      <button id="watch-btn"
         class="text-xs font-mono px-3 py-1.5 rounded border border-[#1e2736] text-slate-500 hover:border-slate-600 hover:text-slate-300 transition-colors">
         Watch
       </button>
@@ -146,6 +150,20 @@
         class="text-xs font-mono px-3 py-1.5 rounded border border-emerald-800 text-emerald-400 hover:border-emerald-600 transition-colors">
         GL
       </button>
+      <!-- Map style picker -->
+      <div class="relative">
+        <button id="map-style-btn"
+          class="text-xs font-mono px-3 py-1.5 rounded border border-[#1e2736] text-slate-500 hover:border-slate-600 hover:text-slate-300 transition-colors">
+          Map
+        </button>
+        <div id="map-style-menu" style="display:none"
+          class="absolute right-0 top-full mt-1.5 z-[1500] bg-[#0d1117] border border-[#1e2736] rounded-lg shadow-2xl overflow-hidden min-w-[160px]">
+          <button data-tile="dark"       class="map-tile-opt w-full text-left px-4 py-2.5 text-xs font-mono text-slate-300 hover:bg-[#1e2736] transition-colors flex items-center gap-2"><span class="tile-check opacity-0">✓</span>Dark Matter</button>
+          <button data-tile="positron"   class="map-tile-opt w-full text-left px-4 py-2.5 text-xs font-mono text-slate-300 hover:bg-[#1e2736] transition-colors flex items-center gap-2"><span class="tile-check opacity-0">✓</span>Positron</button>
+          <button data-tile="osm"        class="map-tile-opt w-full text-left px-4 py-2.5 text-xs font-mono text-slate-300 hover:bg-[#1e2736] transition-colors flex items-center gap-2"><span class="tile-check opacity-0">✓</span>OSM Standard</button>
+          <button data-tile="satellite"  class="map-tile-opt w-full text-left px-4 py-2.5 text-xs font-mono text-slate-300 hover:bg-[#1e2736] transition-colors flex items-center gap-2"><span class="tile-check opacity-0">✓</span>Satellite</button>
+        </div>
+      </div>
       <button id="qrz-btn"
         class="text-xs font-mono px-3 py-1.5 rounded border border-[#1e2736] text-slate-500 hover:border-slate-600 hover:text-slate-300 transition-colors">
         QRZ
@@ -251,10 +269,46 @@ function qrzDot(color: string) {
 // ─── Map ──────────────────────────────────────────────────────────────────────
 
 const map = L.map('map', { center: [54.15, -4.47], zoom: 4 });
-L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
-  subdomains: 'abcd', maxZoom: 19,
-}).addTo(map);
+
+const TILE_CONFIGS: Record<string, { url: string; attribution: string; subdomains?: string; maxZoom?: number }> = {
+  dark:      { url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>', subdomains: 'abcd', maxZoom: 19 },
+  positron:  { url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>', subdomains: 'abcd', maxZoom: 19 },
+  osm:       { url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors', maxZoom: 19 },
+  satellite: { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', attribution: '&copy; Esri, Maxar, Earthstar Geographics', maxZoom: 19 },
+};
+
+let activeTileKey = localStorage.getItem('qsomap_tile') || 'dark';
+let baseTile = L.tileLayer(TILE_CONFIGS[activeTileKey].url, { ...TILE_CONFIGS[activeTileKey] }).addTo(map);
+
+function switchTile(key: string) {
+  if (!TILE_CONFIGS[key] || key === activeTileKey) return;
+  baseTile.remove();
+  activeTileKey = key;
+  baseTile = L.tileLayer(TILE_CONFIGS[key].url, { ...TILE_CONFIGS[key] }).addTo(map);
+  localStorage.setItem('qsomap_tile', key);
+  updateTileMenu();
+}
+
+function updateTileMenu() {
+  document.querySelectorAll<HTMLElement>('.map-tile-opt').forEach(btn => {
+    const check = btn.querySelector<HTMLElement>('.tile-check')!;
+    check.style.opacity = btn.dataset.tile === activeTileKey ? '1' : '0';
+  });
+}
+updateTileMenu();
+
+const mapStyleMenu = document.getElementById('map-style-menu')!;
+document.getElementById('map-style-btn')!.addEventListener('click', (e) => {
+  e.stopPropagation();
+  mapStyleMenu.style.display = mapStyleMenu.style.display === 'none' ? 'block' : 'none';
+});
+document.querySelectorAll<HTMLElement>('.map-tile-opt').forEach(btn => {
+  btn.addEventListener('click', () => {
+    switchTile(btn.dataset.tile!);
+    mapStyleMenu.style.display = 'none';
+  });
+});
+document.addEventListener('click', () => { mapStyleMenu.style.display = 'none'; });
 
 const greylineGroup = L.layerGroup().addTo(map);
 const bandLayerGroups = new Map<string, L.LayerGroup>();

@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.10] — 2026-05-20
+
+### Added
+- Map style switcher — click the Map button to choose between Dark Matter, Positron, OSM Standard, and Satellite; preference saved to localStorage
+- Welcome modal updated to describe the map style option
+
 ## [0.1.9] — 2026-05-20
 
 ### Added
