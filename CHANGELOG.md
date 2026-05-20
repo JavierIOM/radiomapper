@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.11] — 2026-05-20
+
+### Removed
+- Positron and OSM Standard map styles — light backgrounds make markers and lines unreadable
+
 ## [0.1.10] — 2026-05-20
 
 ### Added
