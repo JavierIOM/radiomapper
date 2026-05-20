@@ -6,6 +6,10 @@
 - Map style switcher — click the Map button to choose between Dark Matter, Positron, OSM Standard, and Satellite; preference saved to localStorage
 - Welcome modal updated to describe the map style option
 
+### Fixed
+- Map style dropdown was rendering behind the Leaflet map layers (header z-index raised to 900, above Leaflet's max of ~800)
+- Dropdown close handler now uses click-outside detection instead of stopPropagation
+
 ## [0.1.9] — 2026-05-20
 
 ### Added

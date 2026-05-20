@@ -130,7 +130,7 @@
   </div>
 
   <!-- Header -->
-  <header class="flex items-center justify-between px-4 h-12 bg-[#0d1117] border-b border-[#1e2736] shrink-0 z-10">
+  <header class="flex items-center justify-between px-4 h-12 bg-[#0d1117] border-b border-[#1e2736] shrink-0 z-[900]">
     <div class="flex items-center gap-3">
       <span class="font-mono font-bold text-[#f56400] text-sm tracking-wider" id="header-call">QSO MAP</span>
       <span class="text-[#1e2736]">|</span>
@@ -298,8 +298,8 @@ function updateTileMenu() {
 updateTileMenu();
 
 const mapStyleMenu = document.getElementById('map-style-menu')!;
-document.getElementById('map-style-btn')!.addEventListener('click', (e) => {
-  e.stopPropagation();
+const mapStyleBtn = document.getElementById('map-style-btn')!;
+mapStyleBtn.addEventListener('click', () => {
   mapStyleMenu.style.display = mapStyleMenu.style.display === 'none' ? 'block' : 'none';
 });
 document.querySelectorAll<HTMLElement>('.map-tile-opt').forEach(btn => {
@@ -308,7 +308,11 @@ document.querySelectorAll<HTMLElement>('.map-tile-opt').forEach(btn => {
     mapStyleMenu.style.display = 'none';
   });
 });
-document.addEventListener('click', () => { mapStyleMenu.style.display = 'none'; });
+document.addEventListener('click', (e) => {
+  if (!(e.target as HTMLElement).closest('#map-style-btn') && !(e.target as HTMLElement).closest('#map-style-menu')) {
+    mapStyleMenu.style.display = 'none';
+  }
+});
 
 const greylineGroup = L.layerGroup().addTo(map);
 const bandLayerGroups = new Map<string, L.LayerGroup>();
